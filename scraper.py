@@ -4,14 +4,20 @@ import re
 from datetime import datetime
 import time
 
-from SQL_Code import save_listing
+from SQL_Code import (
+    connect_db,
+    listing_exists,
+    save_listing
+)
 
 
 BASE_URL = "https://jo.opensooq.com/ar/real-estate-for-rent/apartments-for-rent"
 
+PAGINATION_URL = "https://jo.opensooq.com/ar/عقارات/شقق-للايجار"
+
 DOMAIN = "https://jo.opensooq.com"
 
-SAMPLE_SIZE = 5
+NUMBER_OF_PAGES = 10
 
 REQUEST_TIMEOUT = (10, 15)
 
@@ -40,12 +46,10 @@ def get_page(url):
 
         response.raise_for_status()
 
-        soup = BeautifulSoup(
+        return BeautifulSoup(
             response.text,
             "html.parser"
         )
-
-        return soup
 
     except requests.exceptions.Timeout:
 
@@ -109,15 +113,13 @@ def extract_listings(soup):
         )
 
 
-        listings.append(
-            {
-                "listing_id": listing_id,
-                "url": url,
-                "title": title_tag.get_text(
-                    strip=True
-                )
-            }
-        )
+        listings.append({
+            "listing_id": listing_id,
+            "url": url,
+            "title": title_tag.get_text(
+                strip=True
+            )
+        })
 
 
     return listings
@@ -125,7 +127,13 @@ def extract_listings(soup):
 
 def get_listing_page(url):
 
-    full_url = DOMAIN + url
+    if url.startswith("http"):
+
+        full_url = url
+
+    else:
+
+        full_url = DOMAIN + url
 
 
     try:
@@ -136,24 +144,17 @@ def get_listing_page(url):
             timeout=REQUEST_TIMEOUT
         )
 
-
         print(
             "Listing Status:",
             response.status_code
         )
 
-
         response.raise_for_status()
 
-
-        soup = BeautifulSoup(
+        return BeautifulSoup(
             response.text,
             "html.parser"
         )
-
-
-        return soup
-
 
     except requests.exceptions.Timeout:
 
@@ -163,7 +164,6 @@ def get_listing_page(url):
         )
 
         return None
-
 
     except requests.exceptions.RequestException as e:
 
@@ -259,20 +259,7 @@ def extract_description(soup):
         return None
 
 
-    description = section.find(
-        "div",
-        class_=lambda value:
-            value and
-            "overflow-hidden" in value
-    )
-
-
-    if not description:
-
-        return None
-
-
-    return description.get_text(
+    return section.get_text(
         "\n",
         strip=True
     )
@@ -280,28 +267,31 @@ def extract_description(soup):
 
 def extract_price(soup):
 
-    text = soup.get_text(
-        " ",
-        strip=True
+    price_element = soup.find(
+        class_="redColor"
     )
 
 
-    match = re.search(
-        r'(\d+(?:\.\d+)?)\s*(دينار|د\.ا)',
-        text
-    )
+    if price_element:
 
-
-    if match:
-
-        price = float(
-            match.group(1)
+        text = price_element.get_text(
+            " ",
+            strip=True
         )
 
-        currency = match.group(2)
+
+        match = re.search(
+            r'(\d+(?:\.\d+)?)\s*(دينار|د\.ا)',
+            text
+        )
 
 
-        return price, currency
+        if match:
+
+            return (
+                float(match.group(1)),
+                match.group(2)
+            )
 
 
     return None, None
@@ -339,18 +329,9 @@ def extract_coordinates(soup):
 
             if lat_match and lon_match:
 
-                latitude = float(
-                    lat_match.group(1)
-                )
-
-                longitude = float(
-                    lon_match.group(1)
-                )
-
-
                 return (
-                    latitude,
-                    longitude
+                    float(lat_match.group(1)),
+                    float(lon_match.group(1))
                 )
 
 
@@ -433,7 +414,7 @@ def build_listing(
     )
 
 
-    data = {
+    return {
 
         "listing_id":
             listing["listing_id"],
@@ -528,9 +509,6 @@ def build_listing(
     }
 
 
-    return data
-
-
 if __name__ == "__main__":
 
     print(
@@ -546,117 +524,114 @@ if __name__ == "__main__":
     )
 
 
-    search_soup = get_page(
-        BASE_URL
-    )
+    conn = connect_db()
+
+    cursor = conn.cursor()
 
 
-    if search_soup is None:
+    all_listings = []
 
-        print(
-            "Could not load search page."
-        )
-
-        exit()
+    seen_ids = set()
 
 
-    listings = extract_listings(
-        search_soup
-    )
-
-
-    print(
-        "\nListings Found:",
-        len(listings)
-    )
-
-
-    sample_listings = listings[
-        :SAMPLE_SIZE
-    ]
-
-
-    print(
-        "Sample Size:",
-        len(sample_listings)
-    )
-
-
-    results = []
-
-
-    for index, listing in enumerate(
-        sample_listings,
-        start=1
+    for page_number in range(
+        1,
+        NUMBER_OF_PAGES + 1
     ):
+
+        if page_number == 1:
+
+            page_url = BASE_URL
+
+        else:
+
+            page_url = (
+                PAGINATION_URL
+                + "?page="
+                + str(page_number)
+            )
+
 
         print(
             "\n=============================="
         )
 
         print(
-            f"Processing {index}/{len(sample_listings)}"
+            "SEARCH PAGE:",
+            page_number
         )
 
         print(
-            "Listing ID:",
-            listing["listing_id"]
+            "URL:",
+            page_url
         )
+
+
+        search_soup = get_page(
+            page_url
+        )
+
+
+        if search_soup is None:
+
+            continue
+
+
+        page_listings = extract_listings(
+            search_soup
+        )
+
 
         print(
-            "Title:",
-            listing["title"]
+            "Listings on this page:",
+            len(page_listings)
         )
 
 
-        try:
+        new_ids = 0
 
-            listing_soup = get_listing_page(
-                listing["url"]
+
+        for listing in page_listings:
+
+            listing_id = listing[
+                "listing_id"
+            ]
+
+
+            if listing_id in seen_ids:
+
+                continue
+
+
+            seen_ids.add(
+                listing_id
             )
 
 
-            if listing_soup is None:
+            if listing_exists(
+                cursor,
+                listing_id
+            ):
 
                 print(
-                    "Skipping this listing."
+                    "Already in database:",
+                    listing_id
                 )
 
                 continue
 
 
-            data = build_listing(
-                listing,
-                listing_soup
+            all_listings.append(
+                listing
             )
 
-
-            results.append(
-                data
-            )
+            new_ids += 1
 
 
-            action = save_listing(
-                data
-            )
-
-
-            print(
-                "Extraction successful."
-            )
-
-            print(
-                "Database:",
-                action
-            )
-
-
-        except Exception as e:
-
-            print(
-                "Extraction error:",
-                e
-            )
+        print(
+            "New listings to process:",
+            new_ids
+        )
 
 
         time.sleep(
@@ -669,7 +644,8 @@ if __name__ == "__main__":
     )
 
     print(
-        "FINAL RESULTS"
+        "NEW LISTINGS TO PROCESS:",
+        len(all_listings)
     )
 
     print(
@@ -677,28 +653,105 @@ if __name__ == "__main__":
     )
 
 
-    print(
-        "Successfully extracted:",
-        len(results)
-    )
+    inserted = 0
+
+    failed = 0
 
 
-    for index, item in enumerate(
-        results,
+    for index, listing in enumerate(
+        all_listings,
         start=1
     ):
 
         print(
-            f"\nLISTING {index}"
+            "\n=============================="
         )
 
         print(
-            "------------------------------"
+            f"Processing {index}/{len(all_listings)}"
+        )
+
+        print(
+            "Listing ID:",
+            listing["listing_id"]
         )
 
 
-        for key, value in item.items():
+        try:
+
+            listing_soup = get_listing_page(
+                listing["url"]
+            )
+
+
+            if listing_soup is None:
+
+                failed += 1
+
+                continue
+
+
+            data = build_listing(
+                listing,
+                listing_soup
+            )
+
+
+            action = save_listing(
+                cursor,
+                data
+            )
+
+
+            if action == "INSERTED":
+
+                inserted += 1
+
 
             print(
-                f"{key}: {value}"
+                "Database:",
+                action
             )
+
+
+        except Exception as e:
+
+            failed += 1
+
+            print(
+                "Extraction error:",
+                e
+            )
+
+
+        time.sleep(
+            DELAY_BETWEEN_REQUESTS
+        )
+
+
+    conn.commit()
+
+    conn.close()
+
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "SCRAPING FINISHED"
+    )
+
+    print(
+        "=============================="
+    )
+
+    print(
+        "New listings inserted:",
+        inserted
+    )
+
+    print(
+        "Failed:",
+        failed
+    )

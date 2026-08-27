@@ -85,31 +85,43 @@ def insert_listing(
     ))
 
 
-def save_listing(data):
+def update_last_seen(
+    cursor,
+    listing_id,
+    last_seen,
+    status
+):
 
-    conn = connect_db()
+    cursor.execute("""
+        UPDATE listings
+        SET last_seen = ?,
+            status = ?
+        WHERE listing_id = ?
+    """, (
+        last_seen,
+        status,
+        listing_id
+    ))
 
-    cursor = conn.cursor()
 
+def save_listing(
+    cursor,
+    data
+):
 
     if listing_exists(
         cursor,
         data["listing_id"]
     ):
 
-        cursor.execute("""
-            UPDATE listings
-            SET last_seen = ?,
-                status = ?
-            WHERE listing_id = ?
-        """, (
+        update_last_seen(
+            cursor,
+            data["listing_id"],
             data["last_seen"],
-            data["status"],
-            data["listing_id"]
-        ))
+            data["status"]
+        )
 
-        action = "UPDATED"
-
+        return "UPDATED"
 
     else:
 
@@ -118,12 +130,4 @@ def save_listing(data):
             data
         )
 
-        action = "INSERTED"
-
-
-    conn.commit()
-
-    conn.close()
-
-
-    return action
+        return "INSERTED"
