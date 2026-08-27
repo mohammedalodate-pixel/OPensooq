@@ -1,53 +1,129 @@
-
 import sqlite3
 
 
-conn = sqlite3.connect("opensooq.db")
-cursor = conn.cursor()
+DATABASE_NAME = "opensooq.db"
 
-cursor.execute("""
 
-    CREATE TABLE IF NOT EXISTS listings(
-  listing_id       TEXT PRIMARY KEY NOT NULL,
-reference_number TEXT,
-title            TEXT,
-price            REAL,
-currency         TEXT,
-rent_period      TEXT,
-city             TEXT,
-neighborhood     TEXT,
-area_m2          REAL,
-bedrooms         INTEGER,
-bathrooms        INTEGER,
-furnished        TEXT,
-floor            TEXT,
-building_age     TEXT,
-latitude         REAL,
-longitude        REAL,
-published_at     TEXT,
-first_seen       TEXT,
-last_seen        TEXT,
-status            TEXT
+def connect_db():
 
+    return sqlite3.connect(
+        DATABASE_NAME
     )
 
 
-""")
+def listing_exists(
+    cursor,
+    listing_id
+):
 
-
-def listing_exists(listing_id):
     cursor.execute("""
-    SELECT listing_id
-    FROM listings
-    WHERE listing_id = ?
+        SELECT listing_id
+        FROM listings
+        WHERE listing_id = ?
     """, (listing_id,))
 
     row = cursor.fetchone()
 
     return row is not None
 
-print(listing_exists("284980474"))
-print(listing_exists("999999999"))
-conn.commit()
 
-conn.close()
+def insert_listing(
+    cursor,
+    data
+):
+
+    cursor.execute("""
+        INSERT INTO listings (
+            listing_id,
+            reference_number,
+            title,
+            description,
+            price,
+            currency,
+            rent_period,
+            city,
+            neighborhood,
+            area_m2,
+            bedrooms,
+            bathrooms,
+            furnished,
+            floor,
+            building_age,
+            latitude,
+            longitude,
+            published_at,
+            first_seen,
+            last_seen,
+            status
+        )
+        VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+    """, (
+        data["listing_id"],
+        data["reference_number"],
+        data["title"],
+        data["description"],
+        data["price"],
+        data["currency"],
+        data["rent_period"],
+        data["city"],
+        data["neighborhood"],
+        data["area_m2"],
+        data["bedrooms"],
+        data["bathrooms"],
+        data["furnished"],
+        data["floor"],
+        data["building_age"],
+        data["latitude"],
+        data["longitude"],
+        data["published_at"],
+        data["first_seen"],
+        data["last_seen"],
+        data["status"]
+    ))
+
+
+def save_listing(data):
+
+    conn = connect_db()
+
+    cursor = conn.cursor()
+
+
+    if listing_exists(
+        cursor,
+        data["listing_id"]
+    ):
+
+        cursor.execute("""
+            UPDATE listings
+            SET last_seen = ?,
+                status = ?
+            WHERE listing_id = ?
+        """, (
+            data["last_seen"],
+            data["status"],
+            data["listing_id"]
+        ))
+
+        action = "UPDATED"
+
+
+    else:
+
+        insert_listing(
+            cursor,
+            data
+        )
+
+        action = "INSERTED"
+
+
+    conn.commit()
+
+    conn.close()
+
+
+    return action

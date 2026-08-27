@@ -4,12 +4,14 @@ import re
 from datetime import datetime
 import time
 
+from SQL_Code import save_listing
+
 
 BASE_URL = "https://jo.opensooq.com/ar/real-estate-for-rent/apartments-for-rent"
 
 DOMAIN = "https://jo.opensooq.com"
 
-SAMPLE_SIZE = 1
+SAMPLE_SIZE = 5
 
 REQUEST_TIMEOUT = (10, 15)
 
@@ -552,7 +554,7 @@ if __name__ == "__main__":
     if search_soup is None:
 
         print(
-            "\nCould not load search page."
+            "Could not load search page."
         )
 
         exit()
@@ -634,8 +636,18 @@ if __name__ == "__main__":
             )
 
 
+            action = save_listing(
+                data
+            )
+
+
             print(
                 "Extraction successful."
+            )
+
+            print(
+                "Database:",
+                action
             )
 
 
@@ -653,7 +665,7 @@ if __name__ == "__main__":
 
 
     print(
-        "\n\n=============================="
+        "\n=============================="
     )
 
     print(
