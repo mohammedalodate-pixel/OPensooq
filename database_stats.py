@@ -98,3 +98,5 @@ print("Average:", avg_area)
 
 
 conn.close()
+
+

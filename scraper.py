@@ -17,7 +17,7 @@ PAGINATION_URL = "https://jo.opensooq.com/ar/عقارات/شقق-للايجار"
 
 DOMAIN = "https://jo.opensooq.com"
 
-NUMBER_OF_PAGES = 10
+NUMBER_OF_PAGES = 100
 
 REQUEST_TIMEOUT = (10, 15)
 
